@@ -93,7 +93,9 @@ def plot_pcl_intervention(
 
 def plot_correlation_heatmap(
     corr_matrix: pd.DataFrame,
+    annot_matrix: pd.DataFrame,
     highlight: Optional[Tuple[str, str]] = None,
+    bonf_alpha: float = 0.00179,
     save_path: Optional[Path] = None
 ) -> Tuple[plt.Figure, plt.Axes]:
     """
@@ -101,6 +103,7 @@ def plot_correlation_heatmap(
     
     Args:
         corr_matrix: Correlation matrix
+        annot_matrix: Annotation matrix with r values and asterisks
         highlight: Optional tuple of (var1, var2) to highlight
     
     Returns:
@@ -109,11 +112,11 @@ def plot_correlation_heatmap(
     fig, ax = plt.subplots(figsize=(10, 8))
     
     mask = np.triu(np.ones_like(corr_matrix, dtype=bool), k=1)
-    sns.heatmap(corr_matrix, annot=True, fmt='.2f', cmap='RdBu_r', 
+    sns.heatmap(corr_matrix, annot=annot_matrix, fmt='', cmap='RdBu_r', 
                 center=0, square=True, linewidths=0.5, ax=ax, 
                 vmin=-1, vmax=1, annot_kws={'size': 10})
     
-    ax.set_title('Correlation Matrix - All Variables', fontsize=14, pad=20)
+    ax.set_title('Correlation Matrix - All Variables\n† Bonferroni-corrected (28 comparisons)', fontsize=13, pad=15)
     
     if highlight:
         var1, var2 = highlight
@@ -130,12 +133,21 @@ def plot_correlation_heatmap(
     return fig, ax
 
 
+def format_p_value(p: float) -> str:
+    """Format p-value for display."""
+    if p < 0.0001:
+        return "p < 0.0001"
+    else:
+        return f"p = {p:.4f}"
+
+
 def plot_scatter_correlation(
     data: pd.DataFrame,
     var1: str,
     var2: str,
     r: float,
     p_value: float = 0.001,
+    n: int = 50,
     save_path: Optional[Path] = None
 ) -> Tuple[plt.Figure, plt.Axes]:
     """
@@ -159,13 +171,17 @@ def plot_scatter_correlation(
     
     # Regression line
     z = np.polyfit(data[var1].dropna(), data[var2].dropna(), 1)
-    p = np.poly1d(z)
+    p_line = np.poly1d(z)
     x_line = np.linspace(data[var1].min(), data[var1].max(), 100)
-    ax.plot(x_line, p(x_line), 'r--', linewidth=2, label=f'r = {r:.3f}{sig}')
+    ax.plot(x_line, p_line(x_line), 'r--', linewidth=2, label=f'r = {r:.3f}{sig}')
     
     ax.set_xlabel(var1, fontsize=12)
     ax.set_ylabel(var2, fontsize=12)
-    ax.set_title(f'Strongest Correlation: {var1} vs {var2}\n(r = {r:.3f}{sig}, p < 0.001***)', fontsize=13)
+    ax.set_title(
+        f'Strongest Correlation: {var1} vs {var2}\n'
+        f'r = {r:.3f}{sig}, {format_p_value(p_value)}, n = {n}',
+        fontsize=13
+    )
     ax.legend(fontsize=11)
     
     plt.tight_layout()
@@ -231,7 +247,7 @@ def plot_anova_interaction(
     sig_text = f'Time: F = {results["f_time"]:.2f}, p = {p_time:.4f}{time_sig}  |  Interaction: F = {results["f_interaction"]:.2f}, p = {p_int:.4f}{int_sig}'
     ax1.text(0.5, 0.02, sig_text, transform=ax1.transAxes, ha='center', fontsize=9)
     
-    # Add significance bracket for Time effect (between Before and After - averaged)
+    # Add significance bracket for Time effect
     avg_before = plot_data[plot_data['Time'] == 'Before']['mean'].mean()
     avg_after = plot_data[plot_data['Time'] == 'After']['mean'].mean()
     bracket_y = max(avg_before, avg_after) + 0.04
@@ -283,10 +299,13 @@ def plot_anova_interaction(
 def save_all_figures(
     paired_df: pd.DataFrame,
     corr_matrix: pd.DataFrame,
+    annot_matrix: pd.DataFrame,
+    bonf_alpha: float,
     corr_data: pd.DataFrame,
     strongest_pair: Tuple[str, str],
     strongest_r: float,
     strongest_p: float,
+    strongest_n: int,
     anova_data: pd.DataFrame,
     anova_results: dict
 ) -> None:
@@ -300,15 +319,16 @@ def save_all_figures(
     
     # Q2: Correlation Heatmap
     plot_correlation_heatmap(
-        corr_matrix, 
+        corr_matrix, annot_matrix,
         highlight=strongest_pair,
+        bonf_alpha=bonf_alpha,
         save_path=OUTPUT_DIR / "fig2_correlation_heatmap.png"
     )
     
     # Q2: Scatter plot
     var1, var2 = strongest_pair
     plot_scatter_correlation(
-        corr_data, var1, var2, strongest_r, strongest_p,
+        corr_data, var1, var2, strongest_r, strongest_p, strongest_n,
         save_path=OUTPUT_DIR / "fig2b_strongest_correlation.png"
     )
     

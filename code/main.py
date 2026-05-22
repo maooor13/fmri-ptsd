@@ -87,10 +87,13 @@ def main():
     save_all_figures(
         paired_df=q1_data,
         corr_matrix=q2_results['pearson_matrix'],
+        annot_matrix=q2_results['annotation_matrix'],
+        bonf_alpha=q2_results['bonferroni_alpha'],
         corr_data=q2_data,
         strongest_pair=q2_results['strongest_pair'],
         strongest_r=q2_results['strongest_r'],
         strongest_p=q2_results['significance']['p_value'],
+        strongest_n=q2_results['significance']['n'],
         anova_data=q3_data,
         anova_results=q3_results
     )
